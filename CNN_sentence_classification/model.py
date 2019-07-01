@@ -1,9 +1,10 @@
 import tensorflow as tf
 import numpy as np
 import os
+import random
 from matplotlib import pyplot
 from CNN_sentence_classification.config import Config_glove
-
+from CNN_sentence_classification.config import process_MR_dataset
 
 
 
@@ -84,21 +85,27 @@ class CNN_Sentence_classfication:
         with tf.name_scope("accuracy"):
             correct_num = tf.equal(tf.argmax(self.input_y, axis=1), self.prediction)
             self.accuracy = tf.reduce_mean(tf.cast(correct_num, "float"), name="accuracy")
+        self.global_step = tf.Variable(0, name="global_step", trainable=False)
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+        self.grads_and_vars = self.optimizer.compute_gradients(self.loss)
+        self.train_op = self.optimizer.apply_gradients(self.grads_and_vars, global_step=self.global_step)
 
 
 
+with open('../test_dataset/x.txt') as file:
+    data_x = file.read()
+    data_x = np.array(eval(data_x))
+with open('../test_dataset/y.txt') as file:
+    data_y = file.read()
+    data_y = np.array(eval(data_y))
+total_data_num = len(data_x)
+array_np = np.arange(total_data_num)
+random.shuffle(array_np)
+data_x, data_y = data_x[array_np], data_y[array_np]
+train_data_x, train_data_y = data_x[: int(0.8*total_data_num)], data_y[: int(0.8*total_data_num)]
+test_data_x, test_data_y = data_x[int(0.8*total_data_num):], data_y[int(0.8*total_data_num):]
 
-
-
-
-
-
-
-
-
-
-
-
+test_acc_list = []
 
 
 def train():
@@ -107,13 +114,28 @@ def train():
     sess = tf.Session()
     init = tf.global_variables_initializer()
     sess.run(init)
-    x_input = np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]])
-    y_target = np.array([[1, 0], [0, 1]])
-    embedding = sess.run(CNN_model.en_embedding)
-    x = sess.run(CNN_model.final_output, feed_dict={CNN_model.input_x: x_input, CNN_model.input_y: y_target})
-    y = sess.run(CNN_model.accuracy, feed_dict={CNN_model.input_x: x_input, CNN_model.input_y: y_target})
-
-    print('111')
+    for epoch_num in range(config.epoch):
+        random_index = np.arange(len(train_data_x))
+        random.shuffle(random_index)
+        shuffle_data_x = train_data_x[random_index]
+        shuffle_data_y = train_data_y[random_index]
+        train_data_num = len(shuffle_data_x)
+        for i in range(0, train_data_num, config.batch_size):
+            train_x = shuffle_data_x[i:min(train_data_num, i + config.batch_size)]
+            train_y = shuffle_data_y[i:min(train_data_num, i + config.batch_size)]
+            loss, accuracy, _ = sess.run([CNN_model.loss,CNN_model.accuracy, CNN_model.train_op], feed_dict={CNN_model.input_x: train_x,
+                                                                                        CNN_model.input_y: train_y})
+            print("Epoch: "+str(epoch_num)+"---------------"+"loss: "+ str(loss)+"-----"+"accuracy: "+str(accuracy))
+        temp_test_acc = []
+        test_data_num = len(test_data_x)
+        for j in range(0, test_data_num, config.batch_size):
+            test_x  = test_data_x[j: min(j+config.batch_size, test_data_num)]
+            test_y = test_data_y[j: min(j+config.batch_size, test_data_num)]
+            test_acc = sess.run([CNN_model.accuracy], feed_dict={CNN_model.input_x: test_x,CNN_model.input_y: test_y})
+            temp_test_acc.append(test_acc)
+        test_acc_per_epoch = np.mean(temp_test_acc)
+        print("loss of test :"+ str(test_acc_per_epoch))
+        test_acc_list.append(test_acc_per_epoch)
 
 
 if __name__ == '__main__':
